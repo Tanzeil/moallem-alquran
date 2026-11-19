@@ -578,5 +578,36 @@ if (localStorage.getItem("quranDark") === "true") {
 initialize();
 </script>
 
+
+<div class="card" id="quranLabCard">
+  <div class="section-title">🎙️ التسميع والاستماع الذكي</div>
+  <p>اقرئي الآيات بصوت واضح، وسيعرض التطبيق ما تعرّف عليه النموذج من تلاوتك.</p>
+  <button onclick="startQuranLabListening()">🎙️ ابدئي التسميع</button>
+  <button class="secondary" onclick="stopQuranLabListening()">⏹ إيقاف</button>
+  <p id="quranLabStatus" class="status">اضغطي ابدئي التسميع للبدء.</p>
+  <div class="ayah" id="quranLabHeard" aria-live="polite">النص الذي يسمعه النموذج سيظهر هنا.</div>
+  <p class="status">التعرّف الصوتي مساعد آلي وقد يخطئ، ولا يُغني عن مراجعة معلّمة متقنة.</p>
+</div>
+<script>
+function startQuranLabListening() {
+  const out = document.getElementById('quranLabHeard');
+  out.textContent = '';
+  if (window.QuranLab && window.QuranLab.startListening) {
+    window.QuranLab.startListening();
+  } else {
+    document.getElementById('quranLabStatus').textContent = 'ميزة الاستماع متاحة في تطبيق Android بعد تثبيت النسخة الجديدة.';
+  }
+}
+function stopQuranLabListening() {
+  if (window.QuranLab && window.QuranLab.stopListening) window.QuranLab.stopListening();
+}
+window.onQuranLabStatus = function(message) {
+  document.getElementById('quranLabStatus').textContent = message;
+};
+window.onQuranLabHeard = function(message) {
+  document.getElementById('quranLabHeard').textContent = message || 'لم يتم التعرف على كلمات بعد.';
+};
+</script>
+
 </body>
 </html>
