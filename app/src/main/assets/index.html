@@ -330,6 +330,17 @@ async function loadSurah(number) {
   }
 }
 
+let tasmeeTargetAyah = null;
+
+function setTasmeeTarget(number) {
+  tasmeeTargetAyah = Number(number);
+  document.getElementById("tasmeeTarget").textContent =
+    "الآية المحددة للتسميع: " + tasmeeTargetAyah;
+  if (window.QuranLab && window.QuranLab.setTargetAyah) {
+    window.QuranLab.setTargetAyah(currentSurah, tasmeeTargetAyah);
+  }
+}
+
 function renderAyahs(ayahs) {
   if (!ayahs.length) {
     container.innerHTML = "<p class='status'>لا توجد نتائج.</p>";
@@ -581,17 +592,24 @@ initialize();
 
 <div class="card" id="quranLabCard">
   <div class="section-title">🎙️ التسميع والاستماع الذكي</div>
-  <p>اقرئي الآيات بصوت واضح، وسيعرض التطبيق ما تعرّف عليه النموذج من تلاوتك.</p>
+  <p>اختاري آية من المصحف أولاً، ثم ابدئي التسميع. سيعرض التطبيق الأصوات التي تعرّف عليها ويجري مقارنة أولية مع الآية المحددة.</p>
+  <p id="tasmeeTarget" class="status">لم يتم تحديد آية للتسميع بعد.</p>
   <button onclick="startQuranLabListening()">🎙️ ابدئي التسميع</button>
   <button class="secondary" onclick="stopQuranLabListening()">⏹ إيقاف</button>
   <p id="quranLabStatus" class="status">اضغطي ابدئي التسميع للبدء.</p>
   <div class="ayah" id="quranLabHeard" aria-live="polite">النص الذي يسمعه النموذج سيظهر هنا.</div>
+  <div class="ayah" id="quranLabCompare" aria-live="polite">نتيجة المقارنة ستظهر هنا بعد انتهاء التسميع.</div>
   <p class="status">التعرّف الصوتي مساعد آلي وقد يخطئ، ولا يُغني عن مراجعة معلّمة متقنة.</p>
 </div>
 <script>
 function startQuranLabListening() {
   const out = document.getElementById('quranLabHeard');
   out.textContent = '';
+  document.getElementById('quranLabCompare').textContent = 'جاري انتظار نتيجة التسميع...';
+  if (!tasmeeTargetAyah) {
+    document.getElementById('quranLabStatus').textContent = 'اختاري آية من المصحف أولاً بالضغط على «اختاري للتسميع».';
+    return;
+  }
   if (window.QuranLab && window.QuranLab.startListening) {
     window.QuranLab.startListening();
   } else {
@@ -605,7 +623,10 @@ window.onQuranLabStatus = function(message) {
   document.getElementById('quranLabStatus').textContent = message;
 };
 window.onQuranLabHeard = function(message) {
-  document.getElementById('quranLabHeard').textContent = message || 'لم يتم التعرف على كلمات بعد.';
+  document.getElementById('quranLabHeard').textContent = message || 'لم يتم التعرف على أصوات بعد.';
+};
+window.onQuranLabCompare = function(message) {
+  document.getElementById('quranLabCompare').textContent = message;
 };
 </script>
 
