@@ -19,10 +19,38 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
     private var client: TajweedClient? = null
     private var model: TajweedModel? = null
     private var session: TajweedSession? = null
+    @Volatile private var targetSurah: Int? = null
+    @Volatile private var targetAyah: Int? = null
 
     private fun js(name: String, value: String) {
         val safe = value.replace("\\\\", "\\\\\\\\").replace("'", "\\\\'")
         webView.post { webView.evaluateJavascript("window.$name && window.$name('$safe')", null) }
+    }
+
+    @JavascriptInterface
+    fun setTargetAyah(surah: Int, ayah: Int) {
+        if (surah in 1..114 && ayah in 1..286) {
+            targetSurah = surah
+            targetAyah = ayah
+        }
+    }
+
+    private fun editDistance(expected: IntArray, heard: List<Int>): Int {
+        var previous = IntArray(heard.size + 1) { it }
+        for (i in expected.indices) {
+            val current = IntArray(heard.size + 1)
+            current[0] = i + 1
+            for (j in heard.indices) {
+                val cost = if (expected[i] == heard[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost
+                )
+            }
+            previous = current
+        }
+        return previous[heard.size]
     }
 
     @JavascriptInterface
@@ -36,12 +64,35 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                 js("onQuranLabStatus", "جاري تجهيز نموذج التلاوة لأول مرة...")
                 val activeClient = client ?: TajweedClient(appContext, key).also { client = it }
                 val activeModel = model ?: activeClient.model().also { model = it }
-                js("onQuranLabStatus", "جاهز. ابدئي التلاوة.")
+                val surah = targetSurah
+                val ayah = targetAyah
+                if (surah == null || ayah == null) {
+                    js("onQuranLabStatus", "اختاري آية من المصحف أولاً.")
+                    return@launch
+                }
+                val reference = activeModel.reference
+                if (reference == null) {
+                    js("onQuranLabStatus", "بيانات الآية المرجعية غير متاحة في هذا الإصدار.")
+                    return@launch
+                }
+                reference.fetch()
+                val expected = reference.units(surah, ayah)
+                js("onQuranLabStatus", "النموذج جاهز. ابدئي قراءة الآية المحددة.")
+                var compared = false
                 val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
                 session = activeSession
                 activeSession.chunks.collect { chunk ->
                     js("onQuranLabHeard", chunk.decoded.text)
-                    if (chunk.decoded.isFinal) js("onQuranLabStatus", "انتهى التسجيل. راجعي النص المسموع.")
+                    if (chunk.decoded.isFinal && !compared) {
+                        compared = true
+                        val heardIds = chunk.decoded.tokens.map { it.id }
+                        val differences = editDistance(expected, heardIds)
+                        js("onQuranLabStatus", "انتهى التسميع.")
+                        js(
+                            "onQuranLabCompare",
+                            "المقارنة الأولية: تم رصد $differences اختلافاً صوتياً محتملاً في الآية المحددة. هذه ليست حكماً نهائياً على الحفظ أو التجويد."
+                        )
+                    }
                 }
                 session = null
             } catch (e: TajweedError) {
