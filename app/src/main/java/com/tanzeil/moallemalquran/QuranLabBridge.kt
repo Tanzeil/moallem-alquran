@@ -3,6 +3,7 @@ package com.tanzeil.moallemalquran
 import android.content.Context
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import org.json.JSONObject
 import ai.quranlab.tajweedformer.TajweedClient
 import ai.quranlab.tajweedformer.TajweedError
 import ai.quranlab.tajweedformer.TajweedModel
@@ -23,8 +24,11 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
     @Volatile private var targetAyah: Int? = null
 
     private fun js(name: String, value: String) {
-        val safe = value.replace("\\\\", "\\\\\\\\").replace("'", "\\\\'")
-        webView.post { webView.evaluateJavascript("window.$name && window.$name('$safe')", null) }
+        // JSON quoting safely escapes Arabic text, quotes, backslashes and newlines.
+        val safe = JSONObject.quote(value)
+        webView.post {
+            webView.evaluateJavascript("window.$name && window.$name($safe)", null)
+        }
     }
 
     @JavascriptInterface
