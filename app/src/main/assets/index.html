@@ -142,6 +142,9 @@ footer {
 #favorites {display:none}
 .highlight {background:#fff3c7}
 .dark .highlight {background:#53603b}
+.tafsir-box {margin-top:12px;padding:12px;background:#f1f5ef;border-radius:10px;line-height:2}
+.dark .tafsir-box {background:#2b4034}
+.tafsir-box summary {color:var(--green2);font-weight:bold;cursor:pointer}
 </style>
 </head>
 
@@ -223,6 +226,7 @@ const API = "https://api.alquran.cloud/v1";
 
 let surahs = [];
 let currentAyahs = [];
+let currentTafsir = [];
 let currentSurah = 1;
 let fontSize = 27;
 let currentAudioIndex = 0;
@@ -300,19 +304,23 @@ async function loadSurah(number) {
   document.getElementById("favorites").style.display = "none";
 
   try {
-    const [textResponse, audioResponse] = await Promise.all([
-      fetch(`${API}/surah/${number}/quran-uthmani`),
-      fetch(`${API}/surah/${number}/ar.alafasy`)
+    const [textResponse, audioResponse, tafsirResponse] = await Promise.all([
+      fetch(${API}/surah/${number}/quran-uthmani),
+      fetch(${API}/surah/${number}/ar.alafasy),
+      fetch(${API}/surah/${number}/ar.muyassar).catch(() => null)
     ]);
 
     const textData = await textResponse.json();
     const audioData = await audioResponse.json();
+    const tafsirData = tafsirResponse ? await tafsirResponse.json().catch(() => null) : null;
 
     if (textData.code !== 200 || audioData.code !== 200)
       throw new Error("Loading error");
 
     currentAyahs = textData.data.ayahs;
     audioList = audioData.data.ayahs;
+    currentTafsir = tafsirData && tafsirData.code === 200
+      ? tafsirData.data.ayahs : [];
 
     document.getElementById("surahTitle").textContent =
       textData.data.name;
@@ -322,7 +330,7 @@ async function loadSurah(number) {
 
     renderAyahs(currentAyahs);
 
-    saveLastRead(currentSurah, 1);
+    updateLastRead();
 
   } catch(error) {
     document.getElementById("status").textContent =
@@ -339,6 +347,10 @@ function setTasmeeTarget(number) {
   if (window.QuranLab && window.QuranLab.setTargetAyah) {
     window.QuranLab.setTargetAyah(currentSurah, tasmeeTargetAyah);
   }
+  document.getElementById("quranLabStatus").textContent =
+    "تم اختيار الآية. اضغطي ابدئي التسميع عندما تكونين جاهزة.";
+  document.getElementById("quranLabCompare").textContent =
+    "ستظهر المقارنة الأولية بعد انتهاء القراءة.";
 }
 
 function renderAyahs(ayahs) {
@@ -351,6 +363,7 @@ function renderAyahs(ayahs) {
     const saved = favorites.some(
       f => f.surah === currentSurah && f.number === a.numberInSurah
     );
+    const tafsir = currentTafsir.find(t => t.numberInSurah === a.numberInSurah);
 
     return `
       <div class="ayah" id="ayah-${a.numberInSurah}">
@@ -376,6 +389,10 @@ function renderAyahs(ayahs) {
             🎙️ اختاري للتسميع
           </button>
         </div>
+        <details class="tafsir-box">
+          <summary>📚 عرض التفسير الميسّر</summary>
+          <p>${tafsir ? escapeHTML(tafsir.text) : "التفسير غير متاح حالياً؛ تحققي من الاتصال بالإنترنت."}</p>
+        </details>
       </div>
     `;
   }).join("");
