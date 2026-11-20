@@ -1,0 +1,79 @@
+
+let quranAIClient = null;
+let quranAIModel = null;
+let quranAISession = null;
+
+const QURANLAB_KEY = "ضعي_مفتاح_Web_هنا";
+
+async function startQuranListening() {
+  try {
+    if (!currentSurah || !currentAyahs.length) {
+      alert("اختاري سورة أولاً");
+      return;
+    }
+
+    document.getElementById("aiStatus").textContent =
+      "جاري تجهيز الذكاء الاصطناعي...";
+
+    if (!quranAIClient) {
+      quranAIClient = await QuranLab.TajweedClient.create({
+        key: QURANLAB_KEY
+      });
+    }
+
+    if (!quranAIModel) {
+      quranAIModel = await quranAIClient.model();
+    }
+
+    document.getElementById("aiStatus").textContent =
+      "النموذج جاهز. اقرئي الآية الآن.";
+
+    quranAISession = await quranAIModel.listen({
+      endOnSilenceMs: 1500
+    });
+
+    for await (const chunk of quranAISession.chunks) {
+      const decoded = chunk.decoded;
+
+      document.getElementById("aiHeard").textContent =
+        decoded.text || "";
+
+      if (decoded.isFinal) {
+        document.getElementById("aiStatus").textContent =
+          "انتهى التسميع.";
+
+        showQuranVoiceFeedback(decoded);
+      }
+    }
+
+  } catch (error) {
+    document.getElementById("aiStatus").textContent =
+      "تعذر تشغيل التسميع: " + error.message;
+  }
+}
+
+function stopQuranListening() {
+  if (quranAISession) {
+    quranAISession.finish();
+    quranAISession = null;
+  }
+
+  document.getElementById("aiStatus").textContent =
+    "تم إيقاف التسميع.";
+}
+
+function showQuranVoiceFeedback(decoded) {
+  const feedback = document.getElementById("aiFeedback");
+
+  feedback.textContent =
+    "تم التعرف على التلاوة. راجعي النص الظاهر مع الآية المحددة.";
+
+  if ("speechSynthesis" in window) {
+    const message = new SpeechSynthesisUtterance(
+      "انتهى التسميع. راجعي الكلمات التي قرأتيها مع نص الآية."
+    );
+
+    message.lang = "ar";
+    window.speechSynthesis.speak(message);
+  }
+}
