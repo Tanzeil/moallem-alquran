@@ -305,9 +305,9 @@ async function loadSurah(number) {
 
   try {
     const [textResponse, audioResponse, tafsirResponse] = await Promise.all([
-      fetch(${API}/surah/${number}/quran-uthmani),
-      fetch(${API}/surah/${number}/ar.alafasy),
-      fetch(${API}/surah/${number}/ar.muyassar).catch(() => null)
+      fetch(`${API}/surah/${number}/quran-uthmani`),
+      fetch(`${API}/surah/${number}/ar.alafasy`),
+      fetch(`${API}/surah/${number}/ar.muyassar`).catch(() => null)
     ]);
 
     const textData = await textResponse.json();
