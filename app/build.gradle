@@ -3,14 +3,12 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '2.0.21'
 }
 
-// Read the key from a Gradle property first, then the CI environment.
-// Escape it before embedding it in the generated Java string literal.
+// API keys are Base64-encoded into BuildConfig so special characters cannot
+// break generated Java source. Decode in QuranLabBridge at runtime.
 def quranLabKey = providers.gradleProperty('QURANLAB_KEY')
         .orElse(providers.environmentVariable('QURANLAB_KEY'))
         .getOrElse('')
-def escapedQuranLabKey = quranLabKey
-        .replace('\\\\', '\\\\\\\\')
-        .replace('"', '\\\\"')
+def encodedQuranLabKey = quranLabKey.getBytes('UTF-8').encodeBase64().toString()
 
 android {
     namespace 'com.tanzeil.moallemalquran'
@@ -21,7 +19,7 @@ android {
         targetSdk 35
         versionCode 8
         versionName '1.5.0'
-        buildConfigField 'String', 'QURANLAB_KEY', '"' + escapedQuranLabKey + '"'
+        buildConfigField 'String', 'QURANLAB_KEY_B64', '"' + encodedQuranLabKey + '"'
     }
     buildFeatures { buildConfig true }
     compileOptions {
