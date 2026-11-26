@@ -15,6 +15,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private QuranLabBridge quranLabBridge;
     private PermissionRequest pendingWebPermission;
+    private boolean pendingRecitationStart = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -55,20 +56,37 @@ public class MainActivity extends Activity {
         quranLabBridge = new QuranLabBridge(this, webView);
         webView.addJavascriptInterface(quranLabBridge, "QuranLab");
         webView.loadUrl("file:///android_asset/index.html");
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+    }
+
+    // Ask for microphone access only when the user starts recitation.
+    public void requestAudioPermissionForRecitation() {
+        runOnUiThread(() -> {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                if (quranLabBridge != null) quranLabBridge.startListening();
+                return;
+            }
+            pendingRecitationStart = true;
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION_REQUEST);
-        }
+        });
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == AUDIO_PERMISSION_REQUEST && pendingWebPermission != null) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                pendingWebPermission.grant(pendingWebPermission.getResources());
-            } else {
-                pendingWebPermission.deny();
+        if (requestCode == AUDIO_PERMISSION_REQUEST) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (pendingWebPermission != null) {
+                if (granted) pendingWebPermission.grant(pendingWebPermission.getResources());
+                else pendingWebPermission.deny();
+                pendingWebPermission = null;
             }
-            pendingWebPermission = null;
+            if (pendingRecitationStart) {
+                pendingRecitationStart = false;
+                if (granted && quranLabBridge != null) {
+                    quranLabBridge.startListening();
+                } else if (webView != null) {
+                    webView.evaluateJavascript("window.onQuranLabStatus && window.onQuranLabStatus('تم رفض صلاحية الميكروفون. اسمحي للتطبيق باستخدام الميكروفون ثم أعيدي المحاولة.')", null);
+                }
+            }
         }
     }
 
