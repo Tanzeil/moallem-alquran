@@ -615,7 +615,7 @@ initialize();
   <div class="section-title">🎙️ التسميع والاستماع الذكي</div>
   <p>اختاري آية من المصحف أولاً، ثم ابدئي التسميع. سيعرض التطبيق الأصوات التي تعرّف عليها ويجري مقارنة أولية مع الآية المحددة.</p>
   <p id="tasmeeTarget" class="status">لم يتم تحديد آية للتسميع بعد.</p>
-  <button onclick="startQuranLabListening()">🎙️ ابدئي التسميع</button>
+  <button id="quranLabStartButton" onclick="startQuranLabListening()">🎙️ ابدئي التسميع</button>
   <button class="secondary" onclick="stopQuranLabListening()">⏹ إيقاف</button>
   <p id="quranLabStatus" class="status">اضغطي ابدئي التسميع للبدء.</p>
   <div class="ayah" id="quranLabHeard" aria-live="polite">النص الذي يسمعه النموذج سيظهر هنا.</div>
@@ -629,6 +629,7 @@ function startQuranLabListening() {
   const status = document.getElementById('quranLabStatus');
   const out = document.getElementById('quranLabHeard');
   const compare = document.getElementById('quranLabCompare');
+  status.textContent = 'الزر استجاب. جاري فحص صلاحية الميكروفون وجسر التسميع...';
 
   if (quranLabStarting) {
     status.textContent = 'التسميع بدأ بالفعل. اقرئي الآية بصوت واضح ثم انتظري لحظة صمت.';
@@ -684,6 +685,22 @@ window.onQuranLabHeard = function(message) {
 window.onQuranLabCompare = function(message) {
   document.getElementById('quranLabCompare').textContent = message;
 };
+
+// أظهر اتصال جسر Android عند فتح صفحة التطبيق، وسجّل أي خطأ JavaScript للمستخدم.
+window.addEventListener('error', function(event) {
+  const status = document.getElementById('quranLabStatus');
+  if (status) status.textContent = 'خطأ داخل صفحة التسميع: ' + (event.message || 'خطأ JavaScript');
+});
+window.addEventListener('unhandledrejection', function(event) {
+  const status = document.getElementById('quranLabStatus');
+  if (status) status.textContent = 'تعذر إكمال عملية التسميع: ' + String(event.reason || 'خطأ غير معروف');
+});
+window.addEventListener('DOMContentLoaded', function() {
+  const status = document.getElementById('quranLabStatus');
+  if (status) status.textContent = window.QuranLab && typeof window.QuranLab.startListening === 'function'
+    ? 'جسر Android متصل. اضغطي ابدئي التسميع.'
+    : 'جسر Android غير متصل. افتحي التطبيق المثبّت وليس صفحة المتصفح.';
+});
 </script>
 
 </body>
