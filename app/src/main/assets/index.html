@@ -718,26 +718,63 @@ function stopQuranLabListening() {
   }
 }
 window.onQuranLabStatus = function(message) {
-  document.getElementById('quranLabStatus').textContent = message;
-  if (message && (
-      message.includes('انتهى') ||
-      message.includes('إيقاف') ||
-      message.includes('تعذر') ||
-      message.includes('غير متاحة') ||
-      message.includes('غير مضاف') ||
-      message.includes('رفض') ||
-      message.includes('microphone_denied'))) {
-    quranLabStarting = false;
-  }
+  document.getElementById('quranLabStatus').textContent = message || '';
+  const terminal = message && [
+    'انتهت', 'انتهى', 'إيقاف', 'تعذر', 'فشل', 'خطأ',
+    'غير متاحة', 'غير مضاف', 'مفتاح خدمة', 'رفض', 'cancelled',
+    'لا توجد جلسة'
+  ].some(word => message.includes(word));
+  if (terminal) quranLabStarting = false;
+
   const button = document.getElementById('quranLabStartButton');
-  if (button && message && message.includes('بدأ التسجيل')) {
+  if (button && message && (
+      message.includes('التسجيل شغّال') ||
+      message.includes('الميكروفون يستقبل') ||
+      message.includes('يحلله'))) {
     button.textContent = '🎙️ التسجيل شغّال';
   } else if (button && !quranLabStarting) {
     button.textContent = '🎙️ ابدئي التسميع';
   }
 };
+
+function normalizeArabicForMatch(text) {
+  return String(text || '')
+    .replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]/g, '')
+    .replace(/ـ/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/[۞،؛:,.!?؟]/g, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function compareRecitationHeard(heard) {
+  const target = currentAyahs.find(a => a.numberInSurah === Number(tasmeeTargetAyah));
+  if (!target || !heard) return;
+  const expectedWords = normalizeArabicForMatch(target.text).split(' ').filter(Boolean);
+  const heardWords = normalizeArabicForMatch(heard).split(' ').filter(Boolean);
+  if (!expectedWords.length || !heardWords.length) return;
+
+  // Longest common subsequence gives a rough ordered-word match, not a tajweed grade.
+  const dp = Array(heardWords.length + 1).fill(null)
+    .map(() => Array(expectedWords.length + 1).fill(0));
+  for (let i = 1; i <= heardWords.length; i++) {
+    for (let j = 1; j <= expectedWords.length; j++) {
+      dp[i][j] = heardWords[i - 1] === expectedWords[j - 1]
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const matched = dp[heardWords.length][expectedWords.length];
+  const percent = Math.round(matched / expectedWords.length * 100);
+  document.getElementById('quranLabCompare').textContent =
+    'مطابقة الكلمات التقريبية للآية المحددة: ' + percent + '٪ (' +
+    matched + ' من ' + expectedWords.length + ' كلمة). هذه مقارنة نصية وليست حكماً على التجويد.';
+}
+
 window.onQuranLabHeard = function(message) {
   document.getElementById('quranLabHeard').textContent = message || 'لم يتم التعرف على أصوات بعد.';
+  compareRecitationHeard(message);
 };
 window.onQuranLabCompare = function(message) {
   document.getElementById('quranLabCompare').textContent = message;
