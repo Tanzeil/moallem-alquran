@@ -4,6 +4,11 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.Toast;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -19,8 +24,27 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+
+        FrameLayout root = new FrameLayout(this);
         webView = new WebView(this);
-        setContentView(webView);
+        webView.setPadding(0, 0, 0, dp(76));
+        webView.setClipToPadding(false);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Native Android recitation control: bypasses the HTML button/event path.
+        Button nativeRecitationButton = new Button(this);
+        nativeRecitationButton.setText("🎙 بدء التسميع");
+        nativeRecitationButton.setTextSize(16);
+        nativeRecitationButton.setAllCaps(false);
+        nativeRecitationButton.setContentDescription("بدء ميزة التسميع من أندرويد");
+        FrameLayout.LayoutParams buttonParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(64), Gravity.BOTTOM);
+        buttonParams.setMargins(dp(12), 0, dp(12), dp(8));
+        root.addView(nativeRecitationButton, buttonParams);
+        setContentView(root);
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -53,9 +77,18 @@ public class MainActivity extends Activity {
                 if (pendingWebPermission == request) pendingWebPermission = null;
             }
         });
+
         quranLabBridge = new QuranLabBridge(this, webView);
         webView.addJavascriptInterface(quranLabBridge, "QuranLab");
+        nativeRecitationButton.setOnClickListener(v -> {
+            Toast.makeText(this, "زر التسميع في أندرويد استجاب.", Toast.LENGTH_SHORT).show();
+            if (quranLabBridge != null) quranLabBridge.startListening();
+        });
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     // Ask for microphone access only when the user starts recitation.
@@ -96,6 +129,7 @@ public class MainActivity extends Activity {
             pendingWebPermission = null;
         }
         if (quranLabBridge != null) quranLabBridge.close();
+        if (webView != null) webView.destroy();
         super.onDestroy();
     }
 
