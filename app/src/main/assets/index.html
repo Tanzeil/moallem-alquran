@@ -112,6 +112,10 @@ button:active {transform:scale(.97)}
   margin:0 5px;
 }
 .dark .ayah-number {background:#344b3e;color:white}
+.memorization-hidden {filter:blur(7px);user-select:none;cursor:pointer;transition:filter .2s}
+.memorization-hidden.revealed {filter:none;user-select:text}
+.progress-track {height:12px;background:#e5ece6;border-radius:99px;overflow:hidden;margin:10px 0}
+.progress-fill {height:100%;width:0;background:linear-gradient(90deg,#207657,#c49b50);border-radius:99px;transition:width .25s}
 .ayah-actions {
   display:flex;
   flex-wrap:wrap;
@@ -184,6 +188,7 @@ footer {
         <button onclick="changeFont(2)">تكبير الخط +</button>
         <button class="secondary" onclick="changeFont(-2)">تصغير الخط -</button>
         <button onclick="playAll()">▶ تشغيل السورة</button>
+        <button class="secondary" onclick="toggleMemorizationMode()">🧠 وضع الحفظ</button>
         <button class="secondary" onclick="stopAudio()">⏹ إيقاف</button>
       </div>
     </div>
@@ -206,9 +211,12 @@ footer {
   </div>
 
   <div class="card">
-    <div class="section-title">🎯 هدفك اليومي</div>
-    <p>اجعلي لك ورداً يومياً من القرآن الكريم.</p>
-    <p id="dailyProgress">عدد الآيات التي قرأتها: 0</p>
+    <div class="section-title">🎯 وردك اليومي</div>
+    <label for="dailyGoal">الهدف اليومي (آيات فريدة)</label>
+    <select id="dailyGoal" onchange="setDailyGoal(this.value)"><option value="5">٥ آيات</option><option value="10">١٠ آيات</option><option value="15">١٥ آية</option><option value="20">٢٠ آية</option><option value="30">٣٠ آية</option></select>
+    <p id="dailyProgress">قرأتِ اليوم ٠ آيات من هدفك.</p>
+    <div class="progress-track" role="progressbar" aria-label="إنجاز الورد اليومي"><div class="progress-fill" id="dailyProgressFill"></div></div>
+    <p id="dailyGoalMessage" class="status">كل آية تقرئينها تقرّبك من وردك.</p>
   </div>
 
 </div>
@@ -240,9 +248,11 @@ let lastRead = JSON.parse(
   localStorage.getItem("quranLastRead") || "null"
 );
 
-let readCount = Number(
-  localStorage.getItem("quranReadCount") || 0
-);
+let readCount = Number(localStorage.getItem("quranReadCount") || 0);
+let memorizationMode = false;
+let dailyGoal = Number(localStorage.getItem("quranDailyGoal") || 10);
+let dailyReadKeys = JSON.parse(localStorage.getItem("quranDailyReadKeys") || "[]");
+let dailyDate = localStorage.getItem("quranDailyDate") || "";
 
 const select = document.getElementById("surahSelect");
 const container = document.getElementById("ayahContainer");
@@ -367,7 +377,7 @@ function renderAyahs(ayahs) {
 
     return `
       <div class="ayah" id="ayah-${a.numberInSurah}">
-        <span class="ayah-text" style="font-size:${fontSize}px">
+        <span class="ayah-text ${memorizationMode ? "memorization-hidden" : ""}" style="font-size:${fontSize}px" ${memorizationMode ? 'onclick="revealAyah(this)" title="اضغطي لإظهار الآية"' : ""}>
           ${escapeHTML(a.text)}
         </span>
         <span class="ayah-number">${a.numberInSurah}</span>
@@ -538,13 +548,42 @@ function changeFont(amount) {
   });
 }
 
+function localDateKey() {
+  const now = new Date();
+  return now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0");
+}
+
+function resetDailyIfNeeded() {
+  const today = localDateKey();
+  if (dailyDate !== today) {
+    dailyDate = today; dailyReadKeys = [];
+    localStorage.setItem("quranDailyDate", today);
+    localStorage.setItem("quranDailyReadKeys", "[]");
+  }
+}
+
 function markRead(number) {
-  saveLastRead(currentSurah, number);
-
-  readCount++;
-  localStorage.setItem("quranReadCount", readCount);
-
+  saveLastRead(currentSurah, number); resetDailyIfNeeded();
+  const key = currentSurah + ":" + number;
+  if (!dailyReadKeys.includes(key)) {
+    dailyReadKeys.push(key);
+    localStorage.setItem("quranDailyReadKeys", JSON.stringify(dailyReadKeys));
+    readCount++; localStorage.setItem("quranReadCount", readCount);
+  }
   updateProgress();
+}
+
+function setDailyGoal(value) {
+  dailyGoal = Math.max(1, Number(value) || 10);
+  localStorage.setItem("quranDailyGoal", String(dailyGoal)); updateProgress();
+}
+
+function toggleMemorizationMode() {
+  memorizationMode = !memorizationMode; renderAyahs(currentAyahs);
+  document.getElementById("quranLabStatus").textContent = memorizationMode ? "وضع الحفظ مفعّل: اضغطي على نص الآية لإظهاره." : "تم إيقاف وضع الحفظ.";
+}
+
+function revealAyah(element) { element.classList.add("revealed");
 }
 
 function saveLastRead(surah, ayah) {
@@ -568,8 +607,13 @@ function updateLastRead() {
 }
 
 function updateProgress() {
-  document.getElementById("dailyProgress").textContent =
-    "عدد مرات تسجيل القراءة: " + readCount;
+  resetDailyIfNeeded();
+  const count = dailyReadKeys.length;
+  const percent = Math.min(100, Math.round(count / dailyGoal * 100));
+  document.getElementById("dailyProgress").textContent = "أنجزتِ " + count + " من " + dailyGoal + " آيات اليوم (" + percent + "٪).";
+  document.getElementById("dailyProgressFill").style.width = percent + "%";
+  document.getElementById("dailyGoalMessage").textContent = count >= dailyGoal ? "ما شاء الله! أتممتِ وردك اليومي 🌿" : "باقي " + (dailyGoal-count) + " آيات لإكمال وردك.";
+  const goalSelect = document.getElementById("dailyGoal"); if (goalSelect) goalSelect.value = String(dailyGoal);
 }
 
 async function continueReading() {
