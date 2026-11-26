@@ -96,20 +96,21 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                     js("onQuranLabStatus", "اختاري آية من المصحف أولاً.")
                     return@launch
                 }
-                // Begin listening before fetching reference data for comparison.
-                js("onQuranLabStatus", "بدأ التسجيل الآن 🎙️ اقرئي الآية بصوت واضح.")
-                val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
-                session = activeSession
+                // Fetch the reference before opening the microphone session so
+                // the first spoken audio chunk is not lost while loading data.
+                js("onQuranLabStatus", "جاري تجهيز الآية المرجعية قبل فتح الميكروفون...")
                 val reference = activeModel.reference
                 if (reference == null) {
-                    try { activeSession.finish() } catch (_: Exception) { }
-                    session = null
                     startInProgress = false
-                    js("onQuranLabStatus", "بدأ التسجيل، لكن بيانات الآية المرجعية غير متاحة للمقارنة.")
+                    js("onQuranLabStatus", "بيانات الآية المرجعية غير متاحة للمقارنة.")
                     return@launch
                 }
                 reference.fetch()
                 val expected = reference.units(surah, ayah)
+                js("onQuranLabStatus", "تم تجهيز المرجع. جاري فتح الميكروفون...")
+                val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
+                session = activeSession
+                js("onQuranLabStatus", "بدأ التسجيل الآن 🎙️ اقرئي الآية بصوت واضح.")
                 var compared = false
                 activeSession.chunks.collect { chunk ->
                     js("onQuranLabHeard", chunk.decoded.text)
