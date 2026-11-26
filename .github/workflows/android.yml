@@ -2,6 +2,14 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
+    branches: [ main, clean-rewrite ]
+    paths:
+      - 'app/**'
+      - 'index.html'
+      - '*.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/android.yml'
+  pull_request:
     branches: [ main ]
     paths:
       - 'app/**'
@@ -24,10 +32,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Verify Quran Lab key is configured
+        env:
+          QURANLAB_KEY: ${{ secrets.QURANLAB_API_KEY }}
+        run: |
+          if [ -z "$QURANLAB_KEY" ]; then
+            echo "::error::Repository secret QURANLAB_API_KEY is missing. Configure it in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
       - name: Build debug APK
         env:
           QURANLAB_KEY: ${{ secrets.QURANLAB_API_KEY }}
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
