@@ -1,6 +1,9 @@
 package com.tanzeil.moallemalquran
 
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import android.Manifest
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import org.json.JSONObject
@@ -14,6 +17,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class QuranLabBridge(context: Context, private val webView: WebView) {
+    private val activity = context as Activity
     private val appContext = context.applicationContext
     private val scope = MainScope()
     private val key = BuildConfig.QURANLAB_KEY
@@ -59,6 +63,11 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
 
     @JavascriptInterface
     fun startListening() {
+        if (appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            js("onQuranLabStatus", "نحتاج إذن الميكروفون حتى يبدأ التسميع. سيظهر طلب السماح الآن.")
+            activity.requestAudioPermissionForRecitation()
+            return
+        }
         scope.launch {
             try {
                 if (key.isBlank()) {
