@@ -623,25 +623,60 @@ initialize();
   <p class="status">التعرّف الصوتي مساعد آلي وقد يخطئ، ولا يُغني عن مراجعة معلّمة متقنة.</p>
 </div>
 <script>
+let quranLabStarting = false;
+
 function startQuranLabListening() {
+  const status = document.getElementById('quranLabStatus');
   const out = document.getElementById('quranLabHeard');
-  out.textContent = '';
-  document.getElementById('quranLabCompare').textContent = 'جاري انتظار نتيجة التسميع...';
-  if (!tasmeeTargetAyah) {
-    document.getElementById('quranLabStatus').textContent = 'اختاري آية من المصحف أولاً بالضغط على «اختاري للتسميع».';
+  const compare = document.getElementById('quranLabCompare');
+
+  if (quranLabStarting) {
+    status.textContent = 'التسميع بدأ بالفعل. اقرئي الآية بصوت واضح ثم انتظري لحظة صمت.';
     return;
   }
-  if (window.QuranLab && window.QuranLab.startListening) {
+
+  // اختيار آية تلقائياً حتى لا يبدو زر التسميع معطلاً عند نسيان تحديدها.
+  if (!tasmeeTargetAyah) {
+    let firstVisibleAyah = currentAyahs.find(a =>
+      document.getElementById('ayah-' + a.numberInSurah)
+    );
+    const number = lastRead && Number(lastRead.surah) === Number(currentSurah)
+      ? Number(lastRead.ayah)
+      : (firstVisibleAyah ? Number(firstVisibleAyah.numberInSurah) : 1);
+    setTasmeeTarget(number);
+  }
+
+  out.textContent = 'بانتظار بدء القراءة...';
+  compare.textContent = 'ستظهر نتيجة مقارنة مبدئية بعد انتهاء القراءة.';
+  status.textContent = 'جاري تشغيل نموذج التلاوة. إذا كانت أول مرة، انتظري تنزيل النموذج (حوالي 55 ميجابايت) مع اتصال الإنترنت.';
+
+  if (!window.QuranLab || typeof window.QuranLab.startListening !== 'function') {
+    status.textContent = 'جسر التسميع غير موجود. ثبّتي نسخة Android الجديدة التي تحتوي على ربط Quran Lab.';
+    return;
+  }
+
+  quranLabStarting = true;
+  try {
     window.QuranLab.startListening();
-  } else {
-    document.getElementById('quranLabStatus').textContent = 'ميزة الاستماع متاحة في تطبيق Android بعد تثبيت النسخة الجديدة.';
+  } catch (error) {
+    quranLabStarting = false;
+    status.textContent = 'تعذر بدء التسميع: ' + (error && error.message ? error.message : 'خطأ غير معروف');
   }
 }
+
 function stopQuranLabListening() {
-  if (window.QuranLab && window.QuranLab.stopListening) window.QuranLab.stopListening();
+  quranLabStarting = false;
+  if (window.QuranLab && typeof window.QuranLab.stopListening === 'function') {
+    window.QuranLab.stopListening();
+  } else {
+    document.getElementById('quranLabStatus').textContent = 'جسر التسميع غير موجود في هذه النسخة.';
+  }
 }
 window.onQuranLabStatus = function(message) {
   document.getElementById('quranLabStatus').textContent = message;
+  if (message && (message.includes('انتهى') || message.includes('إيقاف') || message.includes('تعذر') || message.includes('microphone_denied'))) {
+    quranLabStarting = false;
+  }
 };
 window.onQuranLabHeard = function(message) {
   document.getElementById('quranLabHeard').textContent = message || 'لم يتم التعرف على أصوات بعد.';
