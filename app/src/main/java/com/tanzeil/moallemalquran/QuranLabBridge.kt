@@ -1,9 +1,9 @@
 package com.tanzeil.moallemalquran
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
-import android.Manifest
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import org.json.JSONObject
@@ -22,137 +22,127 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
     private val scope = MainScope()
     private val key = BuildConfig.QURANLAB_KEY
     private var client: TajweedClient? = null
-    private var model: TajweedModel? = null
-    private var session: TajweedSession? = null
-    @Volatile private var targetSurah: Int? = null
-    @Volatile private var targetAyah: Int? = null
+    @Volatile private var model: TajweedModel? = null
+    @Volatile private var session: TajweedSession? = null
+    @Volatile private var loadingModel = false
+    @Volatile private var pendingStart = false
     @Volatile private var startInProgress = false
 
     private fun js(name: String, value: String) {
-        // JSON quoting safely escapes Arabic text, quotes, backslashes and newlines.
         val safe = JSONObject.quote(value)
-        webView.post {
-            webView.evaluateJavascript("window.$name && window.$name($safe)", null)
-        }
+        webView.post { webView.evaluateJavascript("window.$name && window.$name($safe)", null) }
     }
 
     @JavascriptInterface
     fun setTargetAyah(surah: Int, ayah: Int) {
-        if (surah in 1..114 && ayah in 1..286) {
-            targetSurah = surah
-            targetAyah = ayah
-        }
+        // The reader keeps this call for compatibility; live recognition needs no selected ayah.
     }
 
-    private fun editDistance(expected: IntArray, heard: List<Int>): Int {
-        var previous = IntArray(heard.size + 1) { it }
-        for (i in expected.indices) {
-            val current = IntArray(heard.size + 1)
-            current[0] = i + 1
-            for (j in heard.indices) {
-                val cost = if (expected[i] == heard[j]) 0 else 1
-                current[j + 1] = minOf(
-                    current[j] + 1,
-                    previous[j + 1] + 1,
-                    previous[j] + cost
-                )
-            }
-            previous = current
+    @JavascriptInterface
+    fun prepareModel() {
+        if (model != null || loadingModel) return
+        if (key.isBlank()) {
+            js("onQuranLabStatus", "مفتاح Quran Lab غير موجود في نسخة التطبيق. يلزم إضافة مفتاح التطبيق إلى إعدادات البناء.")
+            return
         }
-        return previous[heard.size]
+        loadingModel = true
+        scope.launch {
+            try {
+                js("onQuranLabStatus", "جاري تجهيز نموذج التسميع لأول مرة. أبقي التطبيق مفتوحاً واتصلي بالإنترنت...")
+                val activeClient = client ?: TajweedClient(appContext, key).also { client = it }
+                activeClient.prefetch { done, total ->
+                    val doneMb = done / (1024 * 1024)
+                    val totalMb = total / (1024 * 1024)
+                    js("onQuranLabStatus", "جاري تنزيل نموذج التسميع: $doneMb من $totalMb ميجابايت...")
+                }
+                js("onQuranLabStatus", "جاري فتح نموذج التسميع...")
+                model = activeClient.model()
+                loadingModel = false
+                js("onQuranLabStatus", "النموذج جاهز. اضغطي بدء التسميع.")
+                if (pendingStart) beginListening()
+            } catch (e: TajweedError) {
+                loadingModel = false
+                pendingStart = false
+                startInProgress = false
+                js("onQuranLabStatus", "${e.code}: ${e.message}. ${e.fix}")
+            } catch (e: Exception) {
+                loadingModel = false
+                pendingStart = false
+                startInProgress = false
+                js("onQuranLabStatus", "فشل تجهيز نموذج التسميع: ${e.message ?: "خطأ غير معروف"}")
+            }
+        }
     }
 
     @JavascriptInterface
     fun startListening() {
-        js("onQuranLabStatus", "تم الضغط على زر التسميع. جاري فحص الميكروفون...")
-        if (targetSurah == null || targetAyah == null) {
-            targetSurah = 1
-            targetAyah = 1
-        }
+        js("onQuranLabStatus", "وصل الضغط إلى Android. جاري فحص إذن الميكروفون...")
         if (appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            js("onQuranLabStatus", "نحتاج إذن الميكروفون حتى يبدأ التسميع. سيظهر طلب السماح الآن.")
+            js("onQuranLabStatus", "اسمحي للتطبيق باستخدام الميكروفون، وسيبدأ التسميع بعد الموافقة.")
             (activity as MainActivity).requestAudioPermissionForRecitation()
             return
         }
         if (startInProgress || session != null) {
-            js("onQuranLabStatus", "التسجيل شغّال بالفعل.")
+            js("onQuranLabStatus", "جلسة التسميع تعمل بالفعل. اقرئي بصوت واضح أو اضغطي إيقاف.")
             return
         }
+        pendingStart = true
+        if (model == null) {
+            prepareModel()
+            js("onQuranLabStatus", "جاري تجهيز النموذج. سيبدأ الاستماع تلقائياً بعد اكتمال التجهيز.")
+            return
+        }
+        beginListening()
+    }
+
+    private fun beginListening() {
+        val activeModel = model ?: return
+        if (startInProgress || session != null) return
+        pendingStart = false
         startInProgress = true
         scope.launch {
             try {
-                if (key.isBlank()) {
-                    startInProgress = false
-                    js("onQuranLabStatus", "مفتاح Quran Lab غير مضاف إلى عملية البناء.")
-                    return@launch
-                }
-                js("onQuranLabStatus", "جاري تجهيز نموذج التلاوة لأول مرة...")
-                val activeClient = client ?: TajweedClient(appContext, key).also { client = it }
-                val activeModel = model ?: activeClient.model().also { model = it }
-                val surah = targetSurah
-                val ayah = targetAyah
-                if (surah == null || ayah == null) {
-                    startInProgress = false
-                    js("onQuranLabStatus", "اختاري آية من المصحف أولاً.")
-                    return@launch
-                }
-                // Fetch the reference before opening the microphone session so
-                // the first spoken audio chunk is not lost while loading data.
-                js("onQuranLabStatus", "جاري تجهيز الآية المرجعية قبل فتح الميكروفون...")
-                val reference = activeModel.reference
-                if (reference == null) {
-                    startInProgress = false
-                    js("onQuranLabStatus", "بيانات الآية المرجعية غير متاحة للمقارنة.")
-                    return@launch
-                }
-                reference.fetch()
-                val expected = reference.units(surah, ayah)
-                js("onQuranLabStatus", "تم تجهيز المرجع. جاري فتح الميكروفون...")
+                js("onQuranLabStatus", "جاري فتح الميكروفون الآن...")
                 val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
                 session = activeSession
-                js("onQuranLabStatus", "بدأ التسجيل الآن 🎙️ اقرئي الآية بصوت واضح.")
-                var compared = false
+                js("onQuranLabStatus", "التسجيل شغّال الآن 🎙️ اقرئي، وسيظهر النص المسموع هنا.")
                 activeSession.chunks.collect { chunk ->
-                    js("onQuranLabHeard", chunk.decoded.text)
-                    if (chunk.decoded.isFinal && !compared) {
-                        compared = true
-                        val heardIds = chunk.decoded.tokens.map { it.id }
-                        val differences = editDistance(expected, heardIds)
-                        js("onQuranLabStatus", "انتهى التسميع.")
-                        js(
-                            "onQuranLabCompare",
-                            "المقارنة الأولية: تم رصد $differences اختلافاً صوتياً محتملاً في الآية المحددة. هذه ليست حكماً نهائياً على الحفظ أو التجويد."
-                        )
+                    val heard = chunk.decoded.text
+                    js("onQuranLabHeard", heard.ifBlank { "الميكروفون مفتوح، في انتظار التلاوة..." })
+                    if (heard.isNotBlank()) {
+                        js("onQuranLabStatus", if (chunk.decoded.isFinal) "انتهى التسجيل تلقائياً بعد الصمت." else "الميكروفون يستقبل التلاوة ويعالجها...")
                     }
                 }
                 session = null
                 startInProgress = false
+                js("onQuranLabStatus", "انتهت جلسة التسميع. يمكنك البدء مرة أخرى.")
             } catch (e: TajweedError) {
-                try { session?.finish() } catch (_: Exception) { }
                 session = null
                 startInProgress = false
-                js("onQuranLabStatus", "${e.code}: ${e.message}. ${e.fix}")
+                pendingStart = false
+                if (e.code != "cancelled") js("onQuranLabStatus", "${e.code}: ${e.message}. ${e.fix}")
             } catch (e: Exception) {
-                try { session?.finish() } catch (_: Exception) { }
                 session = null
                 startInProgress = false
-                js("onQuranLabStatus", "تعذر تشغيل الاستماع: ${e.message ?: "خطأ غير معروف"}")
+                pendingStart = false
+                js("onQuranLabStatus", "تعذر تشغيل الميكروفون: ${e.message ?: "خطأ غير معروف"}")
             }
         }
     }
 
     @JavascriptInterface
     fun stopListening() {
+        pendingStart = false
         startInProgress = false
         scope.launch {
             try { session?.finish() } catch (_: Exception) { }
             session = null
-            js("onQuranLabStatus", "تم إيقاف الاستماع.")
+            js("onQuranLabStatus", "تم إيقاف التسميع.")
         }
     }
 
     fun close() {
-        session?.cancel()
+        try { session?.cancel() } catch (_: Exception) { }
         scope.cancel()
     }
 }
