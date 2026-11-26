@@ -3,6 +3,15 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '2.0.21'
 }
 
+// Read the key from a Gradle property first, then the CI environment.
+// Escape it before embedding it in the generated Java string literal.
+def quranLabKey = providers.gradleProperty('QURANLAB_KEY')
+        .orElse(providers.environmentVariable('QURANLAB_KEY'))
+        .getOrElse('')
+def escapedQuranLabKey = quranLabKey
+        .replace('\\\\', '\\\\\\\\')
+        .replace('"', '\\\\"')
+
 android {
     namespace 'com.tanzeil.moallemalquran'
     compileSdk 35
@@ -10,9 +19,9 @@ android {
         applicationId 'com.tanzeil.moallemalquran'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '1.4.2'
-        buildConfigField 'String', 'QURANLAB_KEY', "\"\${System.getenv('QURANLAB_KEY') ?: ''}\""
+        versionCode 8
+        versionName '1.5.0'
+        buildConfigField 'String', 'QURANLAB_KEY', '"' + escapedQuranLabKey + '"'
     }
     buildFeatures { buildConfig true }
     compileOptions {
