@@ -26,6 +26,7 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
     private var session: TajweedSession? = null
     @Volatile private var targetSurah: Int? = null
     @Volatile private var targetAyah: Int? = null
+    @Volatile private var startInProgress = false
 
     private fun js(name: String, value: String) {
         // JSON quoting safely escapes Arabic text, quotes, backslashes and newlines.
@@ -73,6 +74,11 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
             (activity as MainActivity).requestAudioPermissionForRecitation()
             return
         }
+        if (startInProgress || session != null) {
+            js("onQuranLabStatus", "التسجيل شغّال بالفعل.")
+            return
+        }
+        startInProgress = true
         scope.launch {
             try {
                 if (key.isBlank()) {
@@ -88,17 +94,20 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                     js("onQuranLabStatus", "اختاري آية من المصحف أولاً.")
                     return@launch
                 }
+                // Begin listening before fetching reference data for comparison.
+                js("onQuranLabStatus", "بدأ التسجيل الآن 🎙️ اقرئي الآية بصوت واضح.")
+                val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
+                session = activeSession
                 val reference = activeModel.reference
                 if (reference == null) {
-                    js("onQuranLabStatus", "بيانات الآية المرجعية غير متاحة في هذا الإصدار.")
+                    try { activeSession.finish() } catch (_: Exception) { }
+                    session = null
+                    js("onQuranLabStatus", "بدأ التسجيل، لكن بيانات الآية المرجعية غير متاحة للمقارنة.")
                     return@launch
                 }
                 reference.fetch()
                 val expected = reference.units(surah, ayah)
-                js("onQuranLabStatus", "النموذج جاهز. ابدئي قراءة الآية المحددة.")
                 var compared = false
-                val activeSession = activeModel.listen(TajweedSessionOptions(endOnSilenceMs = 1500))
-                session = activeSession
                 activeSession.chunks.collect { chunk ->
                     js("onQuranLabHeard", chunk.decoded.text)
                     if (chunk.decoded.isFinal && !compared) {
@@ -113,9 +122,16 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                     }
                 }
                 session = null
+                startInProgress = false
             } catch (e: TajweedError) {
+                try { session?.finish() } catch (_: Exception) { }
+                session = null
+                startInProgress = false
                 js("onQuranLabStatus", "${e.code}: ${e.message}. ${e.fix}")
             } catch (e: Exception) {
+                try { session?.finish() } catch (_: Exception) { }
+                session = null
+                startInProgress = false
                 js("onQuranLabStatus", "تعذر تشغيل الاستماع: ${e.message ?: "خطأ غير معروف"}")
             }
         }
