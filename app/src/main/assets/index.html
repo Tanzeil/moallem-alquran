@@ -659,7 +659,7 @@ initialize();
   <div class="section-title">🎙️ التسميع والاستماع الذكي</div>
   <p>اختاري آية من المصحف أولاً، ثم ابدئي التسميع. سيعرض التطبيق الأصوات التي تعرّف عليها ويجري مقارنة أولية مع الآية المحددة.</p>
   <p id="tasmeeTarget" class="status">لم يتم تحديد آية للتسميع بعد.</p>
-  <button id="quranLabStartButton" onclick="window.QuranLab.startListening()">🎙️ ابدئي التسميع</button>
+  <button id="quranLabStartButton" onclick="startQuranLabListening()">🎙️ ابدئي التسميع</button>
   <button class="secondary" onclick="stopQuranLabListening()">⏹ إيقاف</button>
   <p id="quranLabStatus" class="status">اضغطي ابدئي التسميع للبدء.</p>
   <div class="ayah" id="quranLabHeard" aria-live="polite">النص الذي يسمعه النموذج سيظهر هنا.</div>
@@ -719,8 +719,21 @@ function stopQuranLabListening() {
 }
 window.onQuranLabStatus = function(message) {
   document.getElementById('quranLabStatus').textContent = message;
-  if (message && (message.includes('انتهى') || message.includes('إيقاف') || message.includes('تعذر') || message.includes('microphone_denied'))) {
+  if (message && (
+      message.includes('انتهى') ||
+      message.includes('إيقاف') ||
+      message.includes('تعذر') ||
+      message.includes('غير متاحة') ||
+      message.includes('غير مضاف') ||
+      message.includes('رفض') ||
+      message.includes('microphone_denied'))) {
     quranLabStarting = false;
+  }
+  const button = document.getElementById('quranLabStartButton');
+  if (button && message && message.includes('بدأ التسجيل')) {
+    button.textContent = '🎙️ التسجيل شغّال';
+  } else if (button && !quranLabStarting) {
+    button.textContent = '🎙️ ابدئي التسميع';
   }
 };
 window.onQuranLabHeard = function(message) {
