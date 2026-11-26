@@ -82,6 +82,7 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
         scope.launch {
             try {
                 if (key.isBlank()) {
+                    startInProgress = false
                     js("onQuranLabStatus", "مفتاح Quran Lab غير مضاف إلى عملية البناء.")
                     return@launch
                 }
@@ -91,6 +92,7 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                 val surah = targetSurah
                 val ayah = targetAyah
                 if (surah == null || ayah == null) {
+                    startInProgress = false
                     js("onQuranLabStatus", "اختاري آية من المصحف أولاً.")
                     return@launch
                 }
@@ -102,6 +104,7 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
                 if (reference == null) {
                     try { activeSession.finish() } catch (_: Exception) { }
                     session = null
+                    startInProgress = false
                     js("onQuranLabStatus", "بدأ التسجيل، لكن بيانات الآية المرجعية غير متاحة للمقارنة.")
                     return@launch
                 }
@@ -139,6 +142,7 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
 
     @JavascriptInterface
     fun stopListening() {
+        startInProgress = false
         scope.launch {
             try { session?.finish() } catch (_: Exception) { }
             session = null
