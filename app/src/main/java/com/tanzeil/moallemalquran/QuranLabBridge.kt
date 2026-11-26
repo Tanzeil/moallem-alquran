@@ -63,6 +63,11 @@ class QuranLabBridge(context: Context, private val webView: WebView) {
 
     @JavascriptInterface
     fun startListening() {
+        js("onQuranLabStatus", "تم الضغط على زر التسميع. جاري فحص الميكروفون...")
+        if (targetSurah == null || targetAyah == null) {
+            targetSurah = 1
+            targetAyah = 1
+        }
         if (appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             js("onQuranLabStatus", "نحتاج إذن الميكروفون حتى يبدأ التسميع. سيظهر طلب السماح الآن.")
             (activity as MainActivity).requestAudioPermissionForRecitation()
