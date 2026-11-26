@@ -85,6 +85,8 @@ public class MainActivity extends Activity {
             if (quranLabBridge != null) quranLabBridge.startListening();
         });
         webView.loadUrl("file:///android_asset/index.html");
+        // Start model preparation early so the first tap does not appear idle while downloading.
+        quranLabBridge.prepareModel();
     }
 
     private int dp(int value) {
